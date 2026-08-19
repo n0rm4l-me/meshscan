@@ -145,7 +145,7 @@ If meshscan lacks access to `istio-system` PeerAuthentications, it prints a warn
 
 ## Why not `istioctl analyze`?
 
-`istioctl analyze` is great for schema validation: it catches missing Services, unknown hosts, and spec errors. meshscan catches a different class of problems: configurations that are syntactically valid but semantically broken or dangerous at runtime. For example, `istioctl analyze` won't flag a DestinationRule that's missing outlier detection. The rule is valid, but it silently sends traffic to unhealthy pods.
+`istioctl analyze` is great for schema validation: it catches missing Services, unknown hosts, and spec errors. meshscan catches a different class of problems: configurations that are syntactically valid but semantically broken or dangerous at runtime. For example, `istioctl analyze` won't flag a DestinationRule that's missing outlier detection. The rule is valid, but degraded pods (alive, passing health checks, returning 500s) stay in the load balancing pool.
 
 The two tools complement each other.
 
