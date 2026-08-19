@@ -11,6 +11,8 @@ type Snapshot struct {
 	Namespace        string
 	VirtualServices  []*networkingv1alpha3.VirtualService
 	DestinationRules []*networkingv1alpha3.DestinationRule
+	Gateways         []*networkingv1alpha3.Gateway
+	EnvoyFilters     []*networkingv1alpha3.EnvoyFilter
 	PeerAuths        []*securityv1beta1.PeerAuthentication
 	SystemPeerAuths  []*securityv1beta1.PeerAuthentication // mesh-wide PAs from istio-system
 	Pods             []corev1.Pod

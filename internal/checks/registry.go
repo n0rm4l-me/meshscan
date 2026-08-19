@@ -9,8 +9,10 @@ type Check func(snap *model.Snapshot) []model.Finding
 func All() []Check {
 	return []Check{
 		CheckMTLS,
+		CheckEnvoyFilterScope,
 		CheckSidecarCoverage,
 		CheckDeadSubsets,
+		CheckMissingGateway,
 		CheckOutlierDetection,
 		CheckMissingDR,
 		CheckRetryWithoutTimeout,

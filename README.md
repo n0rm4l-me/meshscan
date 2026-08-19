@@ -60,6 +60,8 @@ meshscan report: namespace all namespaces
 | `dead-subsets` | HIGH | VirtualService routes to a subset not defined in the corresponding DestinationRule (produces 503) |
 | `outlier-detection` | HIGH | DestinationRule with no outlier detection configured (unhealthy pods stay in rotation) |
 | `sidecar-coverage` | HIGH | Running pod without `istio-proxy` sidecar that hasn't explicitly opted out |
+| `gateway-missing` | HIGH | VirtualService references a Gateway that does not exist in the namespace (no ingress traffic routed) |
+| `envoyfilter-scope` | HIGH / CRITICAL | EnvoyFilter without `workloadSelector` applies to all pods in the namespace; CRITICAL if in `istio-system` (affects whole mesh) |
 | `missing-dr` | MEDIUM | VirtualService host with no DestinationRule (no traffic policy applied) |
 | `retry-without-timeout` | MEDIUM | VirtualService with `retries.attempts > 0` but no `timeout` (unbounded retry amplification possible) |
 
@@ -109,7 +111,7 @@ meshscan requires `list` access to the following resources:
 
 | Resource | API group | Namespace |
 |---|---|---|
-| `virtualservices`, `destinationrules` | `networking.istio.io` | target namespace |
+| `virtualservices`, `destinationrules`, `gateways`, `envoyfilters` | `networking.istio.io` | target namespace |
 | `peerauthentications` | `security.istio.io` | target namespace + `istio-system` |
 | `pods` | (core) | target namespace |
 | `namespaces` | (core) | cluster-wide (`-A` only) |
@@ -123,7 +125,7 @@ metadata:
   name: meshscan
 rules:
 - apiGroups: [networking.istio.io]
-  resources: [virtualservices, destinationrules]
+  resources: [virtualservices, destinationrules, gateways, envoyfilters]
   verbs: [list]
 - apiGroups: [security.istio.io]
   resources: [peerauthentications]

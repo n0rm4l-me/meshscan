@@ -75,6 +75,18 @@ func (c *Collector) Collect(ctx context.Context, namespace string) (*model.Snaps
 	}
 	snap.DestinationRules = append(snap.DestinationRules, drList.Items...)
 
+	gwList, err := c.istio.NetworkingV1alpha3().Gateways(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list Gateways: %w", err)
+	}
+	snap.Gateways = append(snap.Gateways, gwList.Items...)
+
+	efList, err := c.istio.NetworkingV1alpha3().EnvoyFilters(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list EnvoyFilters: %w", err)
+	}
+	snap.EnvoyFilters = append(snap.EnvoyFilters, efList.Items...)
+
 	paList, err := c.istio.SecurityV1beta1().PeerAuthentications(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("list PeerAuthentications: %w", err)
