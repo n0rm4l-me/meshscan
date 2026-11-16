@@ -5,7 +5,7 @@ go 1.26.4
 retract [v0.1.0, v0.2.0] // cmd/meshscan was never committed, so these versions cannot be installed; use v0.3.0 or later
 
 require (
-	github.com/spf13/cobra v1.10.0
+	github.com/spf13/cobra v1.10.2
 	google.golang.org/protobuf v1.36.8
 	istio.io/api v1.24.3
 	istio.io/client-go v1.24.3
