@@ -6,7 +6,7 @@ retract [v0.1.0, v0.2.0] // cmd/meshscan was never committed, so these versions 
 
 require (
 	github.com/spf13/cobra v1.10.0
-	google.golang.org/protobuf v1.36.8
+	google.golang.org/protobuf v1.36.12
 	istio.io/api v1.24.3
 	istio.io/client-go v1.24.3
 	k8s.io/api v0.35.0
