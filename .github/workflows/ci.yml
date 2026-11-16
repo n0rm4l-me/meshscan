@@ -74,3 +74,14 @@ jobs:
         with:
           go-version-file: go.mod
           go-package: ./...
+
+  changelog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: The newest versioned section can be extracted as release notes
+        run: |
+          version=$(sed -n 's/^## \[\([0-9][0-9.]*\)\].*/\1/p' CHANGELOG.md | head -n 1)
+          echo "newest version in CHANGELOG.md: ${version}"
+          .github/scripts/release-notes.sh "${version}" > /dev/null

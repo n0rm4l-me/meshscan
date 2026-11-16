@@ -46,6 +46,18 @@ Prefer silence over a false positive. When a snapshot cannot prove something (a 
 - Update `CHANGELOG.md` under `Unreleased` for anything a user would notice.
 - Commit messages are short and in the imperative mood, for example `Skip host-network pods in sidecar-coverage`.
 
+## Releasing
+
+`main` is protected: only the maintainer can update it, so contributions arrive as pull requests that the maintainer merges.
+
+To cut a release, the maintainer:
+
+1. Moves the `Unreleased` entries of `CHANGELOG.md` under a new `## [X.Y.Z] - YYYY-MM-DD` heading and updates the link references at the bottom.
+2. Waits for CI to pass on `main`, including `govulncheck`.
+3. Pushes an annotated tag `vX.Y.Z`.
+
+The release workflow then publishes the archives, the checksums and the container image, and uses that changelog section as the release notes. It fails early when the section is missing. A tag cannot be reused once the Go module proxy has seen it, so check CI before tagging.
+
 ## Reporting security issues
 
 Do not open a public issue. See [SECURITY.md](SECURITY.md).
