@@ -32,8 +32,8 @@ func TestJSONNoHTMLEscaping(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := buf.String()
-	// json.Encoder HTML-escaping converts < to the 6-char sequence <.
-	// With SetEscapeHTML(false), that must NOT happen — <<EOF must appear literally.
+	// By default json.Encoder escapes < as the six-character sequence <.
+	// With SetEscapeHTML(false) that must not happen: <<EOF must appear literally.
 	if !strings.Contains(got, "<<EOF") {
 		t.Errorf("expected literal <<EOF in JSON output (angle brackets were escaped); got: %q", got)
 	}

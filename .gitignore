@@ -1,2 +1,12 @@
-meshscan
-meshscan.exe
+# Build artifacts. Anchored to the repo root so they never match cmd/meshscan/.
+/meshscan
+/meshscan.exe
+/bin/
+/dist/
+
+# Test and coverage output
+coverage.out
+coverage.html
+
+# OS noise
+.DS_Store

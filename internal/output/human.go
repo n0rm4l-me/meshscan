@@ -3,7 +3,6 @@ package output
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/n0rm4l-me/meshscan/internal/model"
@@ -18,23 +17,22 @@ const (
 	colorBold   = "\033[1m"
 )
 
-// Human writes a human-readable report to w.
+// Human writes a human-readable report to w, with ANSI colors when color is true.
 // When namespace is empty, the report covers multiple namespaces and each
 // finding is prefixed with its namespace.
-func Human(w io.Writer, findings []model.Finding, namespace string) {
-	nc := os.Getenv("NO_COLOR") != ""
-	reset, bold, gray := colorReset, colorBold, colorGray
-	if nc {
-		reset, bold, gray = "", "", ""
+func Human(w io.Writer, findings []model.Finding, namespace string, color bool) {
+	reset, bold, gray := "", "", ""
+	if color {
+		reset, bold, gray = colorReset, colorBold, colorGray
 	}
 
-	label := namespace
-	if label == "" {
-		label = "all namespaces"
+	scope := "all namespaces"
+	if namespace != "" {
+		scope = "namespace " + namespace
 	}
 
 	if len(findings) == 0 {
-		fmt.Fprintf(w, "%s✓ no issues found in namespace %s%s\n", bold, label, reset)
+		fmt.Fprintf(w, "%s✓ no issues found in %s%s\n", bold, scope, reset)
 		return
 	}
 
@@ -43,7 +41,7 @@ func Human(w io.Writer, findings []model.Finding, namespace string) {
 		counts[f.Severity]++
 	}
 
-	fmt.Fprintf(w, "%smeshscan report: namespace %s%s\n", bold, label, reset)
+	fmt.Fprintf(w, "%smeshscan report: %s%s\n", bold, scope, reset)
 	fmt.Fprintf(w, "%s%d issues: %d critical, %d high, %d medium, %d low%s\n\n",
 		gray,
 		len(findings),
@@ -55,12 +53,11 @@ func Human(w io.Writer, findings []model.Finding, namespace string) {
 	)
 
 	for _, f := range findings {
-		color := severityColor(f.Severity, nc)
 		resource := f.Resource
 		if namespace == "" {
 			resource = f.Namespace + "/" + f.Resource
 		}
-		fmt.Fprintf(w, "%s[%s]%s %s%s%s\n", color, f.Severity, reset, bold, resource, reset)
+		fmt.Fprintf(w, "%s[%s]%s %s%s%s\n", severityColor(f.Severity, color), f.Severity, reset, bold, resource, reset)
 		fmt.Fprintf(w, "  check: %s\n", f.Check)
 		fmt.Fprintf(w, "  %s\n", f.Message)
 		if f.Fix != "" {
@@ -71,8 +68,8 @@ func Human(w io.Writer, findings []model.Finding, namespace string) {
 	}
 }
 
-func severityColor(s model.Severity, nc bool) string {
-	if nc {
+func severityColor(s model.Severity, color bool) string {
+	if !color {
 		return ""
 	}
 	switch s {
