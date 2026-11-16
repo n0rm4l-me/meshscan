@@ -2,7 +2,7 @@
 
 **Audit Istio service mesh configuration for common misconfigurations.**
 
-meshscan reads your cluster's Istio resources (VirtualServices, DestinationRules, PeerAuthentications) and Kubernetes Pod specs, then reports semantic issues that `istioctl analyze` doesn't catch: configurations that parse correctly but break traffic in subtle ways.
+meshscan reads your cluster's Istio resources (VirtualServices, DestinationRules, Gateways, EnvoyFilters, PeerAuthentications) and Kubernetes Pod specs, then reports semantic issues that `istioctl analyze` doesn't catch: configurations that parse correctly but break traffic in subtle ways. It is read-only: it only needs `list` access and never changes the cluster.
 
 ```
 $ meshscan -n production --context my-cluster
@@ -40,7 +40,7 @@ When scanning all namespaces with `-A`, each finding is prefixed with its namesp
 ```
 $ meshscan -A --context my-cluster
 
-meshscan report: namespace all namespaces
+meshscan report: all namespaces
 87 issues: 7 critical, 79 high, 1 medium, 0 low
 
 [CRITICAL] production/PeerAuthentication
@@ -54,16 +54,18 @@ meshscan report: namespace all namespaces
 
 ## Checks
 
+Run `meshscan --list-checks` for the list your binary supports.
+
 | Check | Severity | What it finds |
 |---|---|---|
-| `mtls-enforcement` | CRITICAL | Namespace with no PeerAuthentication (mTLS not enforced) or a mesh-wide PERMISSIVE policy |
+| `mtls-enforcement` | CRITICAL | Namespace whose effective namespace-wide mTLS mode is not STRICT: no PeerAuthentication (and no mesh-wide STRICT policy), or a PERMISSIVE or DISABLE policy. A mode of UNSET inherits from the mesh level, and the oldest namespace-wide policy wins, as in Istio |
 | `dead-subsets` | HIGH | VirtualService routes to a subset not defined in the corresponding DestinationRule (produces 503) |
-| `outlier-detection` | HIGH | DestinationRule with no outlier detection configured (unhealthy pods stay in rotation) |
-| `sidecar-coverage` | HIGH | Running pod without `istio-proxy` sidecar that hasn't explicitly opted out |
-| `gateway-missing` | HIGH | VirtualService references a Gateway that does not exist in the namespace (no ingress traffic routed) |
-| `envoyfilter-scope` | HIGH / CRITICAL | EnvoyFilter without `workloadSelector` applies to all pods in the namespace; CRITICAL if in `istio-system` (affects whole mesh) |
-| `missing-dr` | MEDIUM | VirtualService host with no DestinationRule (no traffic policy applied) |
-| `retry-without-timeout` | MEDIUM | VirtualService with `retries.attempts > 0` but no `timeout` (unbounded retry amplification possible) |
+| `outlier-detection` | HIGH | DestinationRule with no outlier detection, neither at the top level nor on every subset (unhealthy pods stay in rotation) |
+| `sidecar-coverage` | HIGH | Running pod without `istio-proxy` that hasn't opted out. Host-network pods and pods or namespaces in ambient mode (`istio.io/dataplane-mode`) are skipped |
+| `gateway-missing` | HIGH | VirtualService references a Gateway that does not exist in the namespace the reference points to (no ingress traffic routed) |
+| `envoyfilter-scope` | HIGH / CRITICAL | EnvoyFilter with neither `workloadSelector` nor `targetRefs` applies to all pods in the namespace; CRITICAL if in `istio-system` (affects the whole mesh) |
+| `missing-dr` | MEDIUM | VirtualService destination with no DestinationRule (no traffic policy applied) |
+| `retry-without-timeout` | MEDIUM | VirtualService with `retries.attempts > 0` but no `timeout`, or `timeout: 0s` (unbounded retry amplification possible) |
 
 ## Install
 
@@ -78,32 +80,84 @@ git clone https://github.com/n0rm4l-me/meshscan
 cd meshscan && make build
 ```
 
+Tagged releases (`v*`) publish binaries for Linux, macOS and Windows with a checksum file, and a multi-arch container image on `ghcr.io/n0rm4l-me/meshscan`, through [`.github/workflows/release.yml`](.github/workflows/release.yml). The [`Dockerfile`](Dockerfile) builds the same image locally with `make docker`.
+
 ## Usage
 
 ```bash
 # Audit a single namespace
 meshscan -n my-namespace
 
-# Audit all namespaces at once
-meshscan -A
+# Audit all namespaces at once, without infrastructure namespaces
+meshscan -A --exclude-namespace 'kube-*' --exclude-namespace 'gke-*' --exclude-namespace 'istio-*'
 
 # Use a non-default kubeconfig context
 meshscan -n my-namespace --context staging
 
+# Fail a pipeline only on HIGH and above; lower findings are still reported
+meshscan -A --fail-on high
+
 # Machine-readable output for CI
-meshscan -A --json | jq '.[] | select(.severity == "CRITICAL")'
+meshscan -A -o json | jq '.[] | select(.severity == "CRITICAL")'
+meshscan -A -o sarif > meshscan.sarif
 
-# Filter out infrastructure namespaces when using -A
-meshscan -A --json | jq '[.[] | select(.namespace | test("^(kube-|gke-|gmp-|istio-)") | not)]'
+# Run only some checks, or all but some
+meshscan -n my-namespace --checks mtls-enforcement,dead-subsets
+meshscan -n my-namespace --skip-checks sidecar-coverage
 
-# Extend the API timeout (default: 30s)
-meshscan -A --timeout 60s
+# Raise the per-call API timeout (default: 30s) or parallelism (default: 4 namespaces)
+meshscan -A --timeout 60s --concurrency 8
 
-# Print the installed version
+# Print the installed version and the available checks
 meshscan --version
-
-# Exit code: 0 = no findings, 1 = findings present
+meshscan --list-checks
 ```
+
+### Flags
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `-n`, `--namespace` | | Namespace to audit. Required unless `-A` is used |
+| `-A`, `--all-namespaces` | `false` | Audit all namespaces. Mutually exclusive with `-n` |
+| `--exclude-namespace` | | Skip namespaces matching a glob such as `kube-*`. Repeatable. With `-A` only |
+| `--context`, `--kubeconfig` | current context, standard loading rules | Which cluster to talk to |
+| `-o`, `--output` | `human` | `human`, `json` or `sarif`. `--json` is a shorthand for `-o json` |
+| `--fail-on` | `low` | Exit with 1 when a finding is at least this severe: `critical`, `high`, `medium`, `low` or `none` |
+| `--checks`, `--skip-checks` | all checks | Comma-separated check names. Unknown names are an error |
+| `--no-suppress` | `false` | Ignore `meshscan.io/ignore` annotations and report everything |
+| `--timeout` | `30s` | Timeout for each Kubernetes API call. `0` means no limit |
+| `--concurrency` | `4` | Namespaces collected in parallel, 1 to 32 |
+| `--color` | `auto` | `auto`, `always` or `never`. `auto` colors only on a terminal and honors `NO_COLOR` |
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | No findings at or above `--fail-on` |
+| `1` | At least one finding at or above `--fail-on` |
+| `2` | meshscan could not do its job: usage error, cluster error, or an incomplete scan |
+
+An incomplete scan is exit code 2 even when no finding was reported. With `-A`, a namespace that cannot be read (for example, RBAC denies `list pods`) is reported as a warning, the other namespaces are still scanned and printed, and the run ends with 2, because a scan that skipped a namespace cannot claim the mesh is clean. Exclude namespaces you are not meant to read with `--exclude-namespace`.
+
+### Output formats
+
+- `human`: the report shown above, on stdout.
+- `json`: an array of findings with `severity`, `check`, `resource`, `namespace`, `message` and `fix`.
+- `sarif`: a SARIF 2.1.0 log. Findings describe live cluster resources, not files, so results carry logical locations (`namespace/Kind/name`) and no file locations. Consumers that insist on file locations, GitHub code scanning among them, may reject it.
+
+Warnings and notes always go to stderr, so stdout stays machine-readable.
+
+### Acknowledging findings
+
+An owner who accepts a finding can say so on the resource itself, or on the namespace for findings without a resource such as a missing PeerAuthentication:
+
+```yaml
+metadata:
+  annotations:
+    meshscan.io/ignore: "retry-without-timeout, missing-dr"   # or "*" for every check
+```
+
+Suppressed findings are counted in a note on stderr. Auditors can see everything with `--no-suppress`.
 
 ## Permissions
 
@@ -114,7 +168,7 @@ meshscan requires `list` access to the following resources:
 | `virtualservices`, `destinationrules`, `gateways`, `envoyfilters` | `networking.istio.io` | target namespace |
 | `peerauthentications` | `security.istio.io` | target namespace + `istio-system` |
 | `pods` | (core) | target namespace |
-| `namespaces` | (core) | cluster-wide (`-A` only) |
+| `namespaces` | (core) | cluster-wide: `list` for `-A`, `get` for `-n` (optional) |
 
 Example ClusterRole for CI use:
 
@@ -131,17 +185,78 @@ rules:
   resources: [peerauthentications]
   verbs: [list]
 - apiGroups: [""]
-  resources: [pods, namespaces]
+  resources: [pods]
   verbs: [list]
+- apiGroups: [""]
+  resources: [namespaces]
+  verbs: [get, list]
 ```
 
-If meshscan lacks access to `istio-system` PeerAuthentications, it prints a warning to stderr and continues; the mTLS check may miss mesh-wide policies.
+If meshscan lacks access to `istio-system` PeerAuthentications, it prints a warning to stderr and continues; the mTLS check may then report a namespace that a mesh-wide STRICT policy actually protects.
+
+If it cannot `get` the Namespace object with `-n`, it warns and continues without namespace labels and annotations: ambient-mode detection and a namespace-level `meshscan.io/ignore` are then unavailable.
+
+## Running in CI and in the cluster
+
+In a pipeline that already has a kubeconfig:
+
+```yaml
+- run: meshscan -A --exclude-namespace 'kube-*' --fail-on high
+```
+
+As a scheduled job inside the cluster, with the ClusterRole above bound to a dedicated ServiceAccount (replace the image with the one you build or mirror):
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: meshscan
+  namespace: meshscan
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: meshscan
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: meshscan
+subjects:
+- kind: ServiceAccount
+  name: meshscan
+  namespace: meshscan
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: meshscan
+  namespace: meshscan
+spec:
+  schedule: "0 6 * * *"
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          serviceAccountName: meshscan
+          restartPolicy: Never
+          containers:
+          - name: meshscan
+            image: YOUR_REGISTRY/meshscan:TAG
+            args: ["-A", "--exclude-namespace", "kube-*", "-o", "json"]
+```
+
+Inside a pod meshscan uses the in-cluster credentials automatically.
 
 ## Known limitations
 
-**External host heuristic.** `missing-dr` and `dead-subsets` skip hosts that look external: anything containing a dot that doesn't end in `.svc.cluster.local`. This avoids false positives for real external FQDNs, but it also silently skips cross-namespace short refs like `svc.other-ns` and custom internal domains like `payments.internal`. If you route to services in other namespaces using dot notation, those hosts won't be checked.
+**Host resolution.** meshscan reads one namespace at a time. A short destination host such as `payments` is resolved in the namespace of the rule that mentions it, exactly as Istio does, and matches a DestinationRule written as `payments` or `payments.<ns>.svc.cluster.local`. `missing-dr` only judges in-cluster services of the same namespace. For a service of another namespace (`svc.other.svc.cluster.local`) or an external host, `dead-subsets` reports only when a DestinationRule visible in the scanned namespace proves the subset is missing. Hosts under a custom cluster domain (anything other than `.svc.cluster.local`) are treated as external.
 
-**System namespace noise with `-A`.** When scanning all namespaces, GKE and Kubernetes system namespaces (`kube-system`, `gke-*`, `gmp-*`) generate many `sidecar-coverage` findings for infrastructure DaemonSets that intentionally have no Istio sidecar. Filter them out with `--json` and `jq` (see Usage above).
+**Gateways.** A `gateway-missing` check can only verify Gateways of the VirtualService's own namespace. References such as `istio-system/ingress` are skipped.
+
+**mTLS scope.** `mtls-enforcement` judges the namespace-wide and mesh-wide policies. Workload-scoped PeerAuthentications (with a `selector`) and `portLevelMtls` are not evaluated. The mesh root namespace is assumed to be `istio-system`.
+
+**System namespace noise with `-A`.** GKE and Kubernetes system namespaces (`kube-system`, `gke-*`, `gmp-*`) generate many `sidecar-coverage` findings for infrastructure DaemonSets that intentionally have no Istio sidecar. Exclude them with `--exclude-namespace`.
 
 ## Why not `istioctl analyze`?
 
@@ -149,6 +264,15 @@ If meshscan lacks access to `istio-system` PeerAuthentications, it prints a warn
 
 The two tools complement each other.
 
+## Development
+
+```bash
+make check    # go vet, golangci-lint and the tests with the race detector
+make cover    # coverage per function
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add a check, and [SECURITY.md](SECURITY.md) to report a vulnerability. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
+
 ## License
 
-Apache 2.0
+Apache 2.0, see [LICENSE](LICENSE).
