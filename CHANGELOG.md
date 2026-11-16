@@ -46,5 +46,9 @@ All notable changes to this project are documented here. The format follows [Kee
 - Several files were not gofmt-clean, and the linter did not check formatting.
 - The README claimed `dead-subsets` skips external hosts; the behavior now matches the documentation.
 
+### Security
+
+- Updated `golang.org/x/net` to v0.60.0 and, through it, `golang.org/x/text` to v0.42.0, `golang.org/x/sys` and `golang.org/x/term`. `govulncheck` reported eight vulnerabilities (GO-2026-6617, GO-2026-6612, GO-2026-6611, GO-2026-6610, GO-2026-6603, GO-2026-5970, GO-2026-5026 and GO-2026-4918) reachable through the HTTP/2 client code used by client-go.
+
 [Unreleased]: https://github.com/n0rm4l-me/meshscan/compare/v0.3.0...HEAD
 [0.3.0]: https://github.com/n0rm4l-me/meshscan/compare/v0.2.0...v0.3.0
